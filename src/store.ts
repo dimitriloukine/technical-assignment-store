@@ -21,12 +21,10 @@ export type RestrictedProperty = {
 
 export function Restrict(permission?:Permission): any  {
   return (target: Store, propertyKey: string ) => { 
-    let value:any;
-    // TODO  default permissions
-    // const permission:Permission = assignedPermission || Object.getOwnPropertyDescriptor(target, 'defaultPolicy')!.value;
-    const readable:boolean = permission == 'r' || permission == "rw";
-    const writable:boolean = permission == 'w' || permission == "rw";
+    const readable: boolean = permission == 'r' || permission == "rw";
+    const writable: boolean = permission == 'w' || permission == "rw";
 
+    // This is somewhat of a metaprogramming approach, so it would make sense to use the reflect metadata api
     const restrictedProperties:RestrictedProperty[] = Reflect.getMetadata ('restrictedProperties', target) || [];
     if (!restrictedProperties.find(value => value.key == propertyKey)) {
       restrictedProperties.push({
@@ -36,20 +34,7 @@ export function Restrict(permission?:Permission): any  {
       })
     }
 
-    Reflect.defineMetadata('restrictedProperties', restrictedProperties, target)
-
-    const getter = function() {
-      return value;
-    };
-    const setter = function(newValue: any) {
-      value = newValue;
-    };
-
-    Object.defineProperty(target, propertyKey, {
-      set: setter,
-      get: getter,
-      configurable: true
-    });
+    Reflect.defineMetadata('restrictedProperties', restrictedProperties, target);
   }
 }
 export class Store implements IStore {
@@ -70,8 +55,6 @@ export class Store implements IStore {
   }
 
   allowedToWrite(key: string): boolean {
-    console.log(key)
-    console.log(this.defaultPolicy)
     const restrictedProperty:RestrictedProperty = Reflect.getOwnMetadata('restrictedProperties', this)?.find((value:RestrictedProperty) => value.key == key)
     if(!restrictedProperty){
       // fallback to default policy
@@ -82,9 +65,9 @@ export class Store implements IStore {
   }
 
   read(path: string): any {
-    const segments:string[] = path.split(':', 2);
-    const firstKey:string = segments[0];
-    const remainingPath:string = segments[1];
+    const segments: string[] = path.split(':', 2);
+    const firstKey: string = segments[0];
+    const remainingPath: string = segments[1];
 
     if(segments.length > 1) {
       if(typeof (this as any)[firstKey] === 'function'){
@@ -101,13 +84,16 @@ export class Store implements IStore {
   }
 
   write(path: string, value: JSONValue): JSONValue | IStore {
-    const segments:string[] = path.split(':', 2);
-    const firstKey:string = segments[0];
-    const remainingPath:string = segments[1];
+    const segments: string[] = path.split(':', 2);
+    const firstKey: string = segments[0];
+    const remainingPath: string = segments[1];
+
     if(segments.length > 1) {
       if(((this as any)[firstKey] instanceof Store) ){
+        // If the store exists, we will let it check its access rights
         (this as any)[firstKey].write(remainingPath, value)
       }else{
+         // If the store doesn't exist, we will check for the rights at this level
         if(!this.allowedToWrite(firstKey)){
           throw new Error("Write Access Denied");
         }
@@ -125,7 +111,7 @@ export class Store implements IStore {
 
   writeEntries(entries: JSONObject): void {
     for (const key in entries) {
-      this.write(key, entries[key])
+      this.write(key, entries[key]);
     }
   }
 
